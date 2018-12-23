@@ -3,7 +3,7 @@ uses math, sysutils;
 
 const
     TOKEN_MAX_SIZE = 255;
-    OPERATOR_COUNT = 8;
+    OPERATOR_COUNT = 9;
     STACK_MAX_SIZE = 1000;
     EMPTY_TOKEN = '';
     OPERATOR_MAX_PRECEDENCE = 255;
@@ -16,7 +16,8 @@ type
 
     TOperatorType = (OPERATOR_TYPE_UNKNOWN, OPERATOR_TYPE_UNARY, OPERATOR_TYPE_BINARY);
     TOperator = record
-        value :  TToken;          {string representing the operator}
+        value : TToken;           {string representing the operator}
+        alias : TToken;           {alternative string representing the operator, which will be used in the output}
         operands : TOperatorType; {number of operands}
         precedence : integer;     {precedence}
     end;
@@ -107,6 +108,7 @@ begin
     initOperator(operators[5], '/', OPERATOR_TYPE_BINARY, 3);
     initOperator(operators[6], '^', OPERATOR_TYPE_BINARY, 4);
     initOperator(operators[7], 'ln', OPERATOR_TYPE_UNARY, 5);
+    initOperator(operators[8], 'neg', OPERATOR_TYPE_UNARY, 6);
 end;  
 
 function getPrecedence(token : TToken) : integer;
@@ -141,6 +143,21 @@ begin
          if operators[i].value = token then
          begin
             isOperator := True;
+            break;
+        end;
+end;
+
+function getOperatorAlias(token : TToken) : TToken;
+var i : integer;
+begin
+    getOperatorAlias := EMPTY_TOKEN;
+    for i := 0 to OPERATOR_COUNT-1 do
+         if operators[i].value = token then
+         begin
+            if operators[i].alias = EMPTY_TOKEN then
+                getOperatorAlias := token
+            else
+                getOperatorAlias := operators[i].alias;
             break;
         end;
 end;
@@ -374,6 +391,8 @@ begin
             result := doubleToToken( tokenToDouble(operand1) ** tokenToDouble(operand2) );
         'ln':
             result := doubleToToken( ln(tokenToDouble(operand1)) );
+        'neg':
+            result := doubleToToken( -tokenToDouble(operand1) );
     end;
     compute := result;
 end;
@@ -391,10 +410,16 @@ begin
     if getTokenPriority(operand2) < getPrecedence(op) then
         operand2 := '(' + operand2 + ')';
     
-    if getPrecedence(op) <= spacing then
-         simplify := operand1 + ' ' + op + ' ' + operand2
+    if getOperandType(op) = OPERATOR_TYPE_BINARY then
+        if getPrecedence(op) <= spacing then
+            simplify := operand1 + ' ' + op + ' ' + operand2
+        else
+            simplify := operand1 + op + operand2
     else
-        simplify := operand1 + op + operand2;
+        if getPrecedence(op) <= spacing then
+            simplify := op + ' ' + operand1
+        else
+            simplify := op + operand1;
 
     {rewrite rules}
     if isNumber(operand1) and isNumber(operand2) then
@@ -452,17 +477,16 @@ begin
             result := simplify( '/', simplify('-', simplify('*', v, dudx), simplify('*', u, dvdx)), simplify('^', v, '2') ); 
         '^':
             begin
-                if isNumber(v) then
-                    result := simplify('*', v, simplify('^', u, simplify('-', v, '1')))
-                else
+                if isNumber(v) then { d/dx(u ^ c) = du/dx * c * u^(c - 1) }
+                    result := simplify('*', dudx, simplify('*', v, simplify('^', u, simplify('-', v, '1'))))
+                else { (v*u^(v-1)*du/dx)+u^v*ln(u)*dv/dx }
                     result := '0';
-                {
-                    (v*u^(v-1)*du/dx)+u^v*ln(u)*dv/dx
-                    simplify( '*', simplify('^', simplify('*', v, u),  simplify('-', v, '1')), dudx)
-                }
+                    { simplify( '*', simplify('^', simplify('*', v, u),  simplify('-', v, '1')), dudx) }
             end; 
         'ln': {d/dx(ln(u)) = du/dx / u}
             result := simplify('/', dudx, u);
+        'neg':
+            result := simplify('neg', dudx, EMPTY_TOKEN);
         EMPTY_TOKEN:{d/dx(c) = 0, d/dx(x) = 1}
             begin
                 if u = 'x' then
@@ -537,7 +561,7 @@ begin
 
     
     //str := 'x*ln(x^3 + 2) + x*2^4';
-    str := 'x*ln(x^2)';
+    str := 'neg(x^2 + x)';
     writeln();
     write('d/dx(', str, ') = ');
 
