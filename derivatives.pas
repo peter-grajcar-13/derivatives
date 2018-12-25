@@ -49,7 +49,7 @@ begin
         if not ( ((token[i] >= '0') and (token[i] <= '9')) or (token[i] = '.') ) then
             isNumber := False;
 end;
-{===============}
+{===============================}
 
 
 {Stack Functions}
@@ -109,6 +109,8 @@ begin
     initOperator(operators[6], '^', OPERATOR_TYPE_BINARY, 4);
     initOperator(operators[7], 'ln', OPERATOR_TYPE_UNARY, 5);
     initOperator(operators[8], 'neg', OPERATOR_TYPE_UNARY, 6);
+    
+    operators[8].alias := '-';
 end;  
 
 function getPrecedence(token : TToken) : integer;
@@ -201,7 +203,7 @@ begin
 
     getTokenPriority := min;
 end;
-{=========================}
+{===============================}
 
 
 { Expression Functions}
@@ -230,7 +232,7 @@ begin
 
     while next <= length(expr)+1 do
     begin
-        {set type of a new token}
+        {set type of the new token}
         if token = EMPTY_TOKEN then
         begin
             if isValidValueChar(expr[next]) then
@@ -270,7 +272,7 @@ begin
 
     nextToken := EMPTY_TOKEN;
 end;
-{==========================}
+{===============================}
 
 
 {Postfix Functions}
@@ -396,30 +398,34 @@ begin
     end;
     compute := result;
 end;
-{==========================}
+{===============================}
 
 
 { Derivatives }
 {put spaces around operator with thisprecedence value}
 var spacing : integer = 2; 
+
 function simplify(op, operand1, operand2 : TToken) : TToken;
+var opSymbol : TToken;
 begin
     {check if paranthesis are necessary for each operand}
     if getTokenPriority(operand1) < getPrecedence(op) then
         operand1 := '(' + operand1 + ')';
     if getTokenPriority(operand2) < getPrecedence(op) then
         operand2 := '(' + operand2 + ')';
+
+    opSymbol := getOperatorAlias(op);
     
     if getOperandType(op) = OPERATOR_TYPE_BINARY then
         if getPrecedence(op) <= spacing then
-            simplify := operand1 + ' ' + op + ' ' + operand2
+            simplify := operand1 + ' ' + opSymbol + ' ' + operand2
         else
-            simplify := operand1 + op + operand2
+            simplify := operand1 + opSymbol + operand2
     else
         if getPrecedence(op) <= spacing then
-            simplify := op + ' ' + operand1
+            simplify := opSymbol + ' ' + operand1
         else
-            simplify := op + operand1;
+            simplify := opSymbol + operand1;
 
     {rewrite rules}
     if isNumber(operand1) and isNumber(operand2) then
@@ -480,8 +486,10 @@ begin
                 if isNumber(v) then { d/dx(u ^ c) = du/dx * c * u^(c - 1) }
                     result := simplify('*', dudx, simplify('*', v, simplify('^', u, simplify('-', v, '1'))))
                 else { (v*u^(v-1)*du/dx)+u^v*ln(u)*dv/dx }
-                    result := '0';
-                    { simplify( '*', simplify('^', simplify('*', v, u),  simplify('-', v, '1')), dudx) }
+                    result := simplify('+',
+                        simplify( '*', simplify( '*', simplify('^', u,  simplify('-', v, '1')), v), dudx),
+                        simplify( '*', simplify( '*', simplify('^', u,  v), simplify('ln', u, EMPTY_TOKEN)), dvdx)
+                    );
             end; 
         'ln': {d/dx(ln(u)) = du/dx / u}
             result := simplify('/', dudx, u);
@@ -551,7 +559,7 @@ begin
     popStack(derivativeStack, derivativeStackPointer, token);
     differentiatePostfix := token;
 end;
-{==============}
+{===============================}
 
 
 {main procedure}
@@ -561,9 +569,9 @@ begin
 
     
     //str := 'x*ln(x^3 + 2) + x*2^4';
-    str := 'neg(x^2 + x)';
+    str := 'x^x';
     writeln();
-    write('d/dx(', str, ') = ');
+    write('d/dx ', str, ' = ');
 
     str := postfix(str);
     //writeln(str);
