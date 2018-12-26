@@ -35,6 +35,13 @@ var operators : array[0..OPERATOR_COUNT-1] of TOperator;
     derivativeStackPointer : integer = 0;
 
 {Misc Utilities}
+procedure error(msg : string);
+begin
+    writeln();
+    writeln('ERROR: ', msg);
+    halt();
+end;
+
 function doubleToToken(num : double) : TToken;
 begin
     doubleToToken := FloatToStr(num);
@@ -108,11 +115,12 @@ begin
     initOperator(operators[1], ')', OPERATOR_TYPE_UNARY, 1);
     initOperator(operators[2], '+', OPERATOR_TYPE_BINARY, 2);
     initOperator(operators[3], '-', OPERATOR_TYPE_BINARY, 2);
-    initOperator(operators[4], '*', OPERATOR_TYPE_BINARY, 3);
-    initOperator(operators[5], '/', OPERATOR_TYPE_BINARY, 3);
-    initOperator(operators[6], '^', OPERATOR_TYPE_BINARY, 4);
-    initOperator(operators[7], 'ln', OPERATOR_TYPE_UNARY, 5);
-    initOperator(operators[8], 'neg', OPERATOR_TYPE_UNARY, 6);
+    initOperator(operators[8], 'neg', OPERATOR_TYPE_UNARY, 3);
+    initOperator(operators[4], '*', OPERATOR_TYPE_BINARY, 4);
+    initOperator(operators[5], '/', OPERATOR_TYPE_BINARY, 4);
+    initOperator(operators[6], '^', OPERATOR_TYPE_BINARY, 5);
+    initOperator(operators[7], 'ln', OPERATOR_TYPE_UNARY, 6);
+    
     
     operators[8].alias := '-';
 end;  
@@ -129,14 +137,14 @@ begin
         end;
 end;
 
-function getOperandType(token : TToken) : TOperatorType;
+function getOperatorType(token : TToken) : TOperatorType;
 var i : integer;
 begin
-    getOperandType := OPERATOR_TYPE_UNKNOWN;
+    getOperatorType := OPERATOR_TYPE_UNKNOWN;
     for i := 0 to OPERATOR_COUNT-1 do
         if operators[i].value = token then
         begin
-            getOperandType := operators[i].operands;
+            getOperatorType := operators[i].operands;
             break;
         end;
 end;
@@ -223,10 +231,10 @@ end;
 
 function nextToken() : TToken;
 var token : TToken; 
-    current_type : TTokenType;
+    currentType : TTokenType;
 begin
     token := EMPTY_TOKEN;
-    current_type := TOKEN_TYPE_NONE;
+    currentType := TOKEN_TYPE_NONE;
 
     if next > length(expr) then
     begin
@@ -240,15 +248,15 @@ begin
         if token = EMPTY_TOKEN then
         begin
             if isValidValueChar(expr[next]) then
-                current_type := TOKEN_TYPE_VALUE
+                currentType := TOKEN_TYPE_VALUE
             else if expr[next] <> ' ' then
-                current_type := TOKEN_TYPE_OPERATOR
+                currentType := TOKEN_TYPE_OPERATOR
             else
-                current_type := TOKEN_TYPE_NONE;
+                currentType := TOKEN_TYPE_NONE;
         end;
 
         {value token}
-        if current_type = TOKEN_TYPE_VALUE then
+        if currentType = TOKEN_TYPE_VALUE then
         begin
             if isValidValueChar(expr[next]) then
                 token += expr[next]
@@ -260,10 +268,15 @@ begin
         end;
 
         {operator token}
-        if current_type = TOKEN_TYPE_OPERATOR then
+        if currentType = TOKEN_TYPE_OPERATOR then
         begin
             if not isOperator(token) then
-                token += expr[next]
+            begin
+                token += expr[next];
+                if (next = length(expr)) and not isOperator(token) then
+                    error('illegal expression.');
+                  
+            end
             else
             begin
                 nextToken := token;
@@ -281,16 +294,36 @@ end;
 
 {Postfix Functions}
 function postfix(infix : string) : string;
-var token, top : TToken;
+var token, previous, top : TToken;
 begin
     postfix := '';
     setExpression(infix);
     clearStack(operatorStack, operatorStackPointer);
 
+    previous := EMPTY_TOKEN;
+
     token := nextToken();
-    while token <> '' do
+    if token = EMPTY_TOKEN then
+        error('illegal expression');
+   
+
+    while token <> EMPTY_TOKEN do
     begin
-        
+
+        {rewrites unary minus into 'neg' operator}
+        if token = '-' then
+            if (previous = EMPTY_TOKEN) or isOperator(previous) then
+                token := 'neg';
+
+        {handle illegal expressions}
+        if not isOperator(token) and not isNumber(token) and (token <> 'x') then
+            error('invalid token "' + token + '".')            
+        else if previous = EMPTY_TOKEN then
+            if isOperator(token) and (getOperatorType(token) = OPERATOR_TYPE_BINARY) then
+                error('unexpected operator "' + token + '"');
+                    
+
+
         if not isOperator(token) then
             postfix += token + ' '
         else
@@ -318,8 +351,12 @@ begin
                 end;
         end;
 
+        previous := token;
         token := nextToken();
     end;
+
+    if isOperator(previous) and (previous <> ')') then
+        error('expected value, found operator.');
 
     while operatorStackPointer > 0 do
     begin
@@ -342,7 +379,7 @@ begin
             pushStack(operandStack, operandStackPointer, token)
         else
         begin
-            typ := getOperandType(token);
+            typ := getOperatorType(token);
 
             if typ = OPERATOR_TYPE_UNARY then
                 begin
@@ -412,6 +449,7 @@ var spacing : integer = 2;
 function simplify(op, operand1, operand2 : TToken) : TToken;
 var opSymbol : TToken;
 begin
+
     {check if paranthesis are necessary for each operand}
     if getTokenPriority(operand1) < getPrecedence(op) then
         operand1 := '(' + operand1 + ')';
@@ -420,7 +458,7 @@ begin
 
     opSymbol := getOperatorAlias(op);
     
-    if getOperandType(op) = OPERATOR_TYPE_BINARY then
+    if getOperatorType(op) = OPERATOR_TYPE_BINARY then
         if getPrecedence(op) <= spacing then
             simplify := operand1 + ' ' + opSymbol + ' ' + operand2
         else
@@ -468,6 +506,10 @@ begin
            simplify := operand1; 
         if operand2 = '0' then
             simplify := '1';
+    end
+    else if op = 'neg' then
+    begin
+        simplify := '-' + operand1;
     end;
 end;
 
@@ -475,7 +517,7 @@ function differentiate(op, u, v, dudx, dvdx : TToken) : TToken;
 var result : TToken;
 begin
     result := '0';
-    if not (isNumber(u) and isNumber(v)) then
+    if not isNumber(u) or not isNumber(v) then
     case op of
         '+':{d/dx(u + v) = du/dx + dv/dx}
             result := simplify('+', dudx, dvdx);
@@ -519,7 +561,7 @@ begin
     clearStack(derivativeStack, derivativeStackPointer);
 
     token := nextToken();
-    while token <> '' do
+    while token <> EMPTY_TOKEN do
     begin
         if not isOperator(token) then
             begin
@@ -528,7 +570,7 @@ begin
             end
         else
             begin
-                typ := getOperandType(token);
+                typ := getOperatorType(token);
 
                 if typ = OPERATOR_TYPE_UNARY then
                     begin
