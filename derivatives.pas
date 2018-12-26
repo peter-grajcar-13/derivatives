@@ -1,3 +1,7 @@
+{   Derivacie   }
+{ Peter Grajcar }
+{   2018/2019   }
+{    NPRG030    }
 program tokenize;
 uses math, sysutils;
 
@@ -402,7 +406,7 @@ end;
 
 
 { Derivatives }
-{put spaces around operator with thisprecedence value}
+{put spaces around operator with this precedence value}
 var spacing : integer = 2; 
 
 function simplify(op, operand1, operand2 : TToken) : TToken;
@@ -569,12 +573,14 @@ begin
 
     
     //str := 'x*ln(x^3 + 2) + x*2^4';
-    str := 'x^x';
+    //str := 'x^x';
+
+    write('f(x)  = ');
+    readln(str);
     writeln();
-    write('d/dx ', str, ' = ');
+    write('f', '''' ,'(x) = ');
 
     str := postfix(str);
-    //writeln(str);
     writeln(differentiatePostfix(str));
 
     writeln();
