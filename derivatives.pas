@@ -2,7 +2,7 @@
 { Peter Grajcar }
 {   2018/2019   }
 {    NPRG030    }
-program tokenize;
+program derivatives;
 uses math, sysutils;
 
 const
@@ -20,10 +20,10 @@ type
 
     TOperatorType = (OPERATOR_TYPE_UNKNOWN, OPERATOR_TYPE_UNARY, OPERATOR_TYPE_BINARY);
     TOperator = record
-        value : TToken;           {string representing the operator}
-        alias : TToken;           {alternative string representing the operator, which will be used in the output}
-        operands : TOperatorType; {number of operands}
-        precedence : integer;     {precedence}
+        value : TToken;                          {string representing the operator}
+        alias : TToken;                          {alternative string representing the operator, used in the output}
+        operands : TOperatorType;                {number of operands}
+        precedence : 1..OPERATOR_MAX_PRECEDENCE; {precedence}
     end;
 
 var operators : array[0..OPERATOR_COUNT-1] of TOperator;
@@ -120,7 +120,6 @@ begin
     initOperator(operators[5], '/', OPERATOR_TYPE_BINARY, 4);
     initOperator(operators[6], '^', OPERATOR_TYPE_BINARY, 5);
     initOperator(operators[7], 'ln', OPERATOR_TYPE_UNARY, 6);
-    
     
     operators[8].alias := '-';
 end;  
@@ -495,6 +494,15 @@ begin
         if (operand1 = 'x') and (operand2 = 'x') then
                 simplify := '2*x';
     end
+    else if op = '-' then
+    begin
+        if operand1 = operand2 then
+            simplify := '0';
+        if operand2 = '0' then
+            simplify := operand1;
+        if operand1 = '0' then
+            simplify := '-' + operand2;
+    end
     else if op = '/' then
     begin
         if operand2 = '1' then
@@ -613,19 +621,12 @@ var str : string;
 begin
     initOperators();
 
-    
-    //str := 'x*ln(x^3 + 2) + x*2^4';
-    //str := 'x^x';
-
     write('f(x)  = ');
     readln(str);
-    writeln();
     write('f', '''' ,'(x) = ');
 
     str := postfix(str);
     writeln(differentiatePostfix(str));
 
     writeln();
-
-    
 end.
